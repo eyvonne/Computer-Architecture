@@ -10,15 +10,13 @@ class CPU:
         """Construct a new CPU."""
         self.memory = [0] * 256
         self.registers = [0] * 8
+        self.SP = 7
+        self.registers[self.SP] = 0xf4  # initialize the SP
         self.PC = 0
         self.IR = 0
         self.MAR = 0
         self.MDR = 0
         self.flags = 0b00000000
-
-        self.cpuOps = {1: 'HLT',
-                       7: 'PRN',
-                       2: 'LDI'}
 
     def load(self, file=None):
         """Load a program into memory."""
@@ -88,32 +86,56 @@ class CPU:
         print()
 
     def run(self):
+        """CPU Functions"""
+        def LDI(temp_a, temp_b):
+            self.registers[temp_a] = temp_b
+            self.PC += 3
+
+        def PRN(register, temp_b):
+            print(self.registers[register])
+            self.PC += 2
+
+        def HLT(temp_a, temp_b):
+            self.running = False
+
+        def PUSH(temp_a, temp_b):
+            self.registers[self.SP] -= 1
+            self.ram_write(self.registers[self.SP], self.registers[temp_a])
+            self.PC += 2
+
+        def POP(temp_a, temp_b):
+            if self.registers[self.SP] < 0xf4:
+                self.registers[tem_a] = self.ram_read(self.registers[7])
+                self.registers[self.SP] += 1
+                self.PC += 2
+
+        self.cpuOps = {1: HLT,
+                       7: PRN,
+                       2: LDI,
+                       5: PUSH,
+                       6: POP}
+
         """Run the CPU."""
-        running = True
-        while running:
+        self.running = True
+        while self.running:
             # get the data out of the instruction
             bits = int(self.ram_read(self.PC), 2)
             self.IR = bits & int('00001111', 2)
-
             temp_a = int(self.ram_read(self.PC + 1), 2) if (bits &
                                                             int('11000000', 2)) >> 6 >= 1 else None
             temp_b = int(self.ram_read(self.PC + 2), 2) if (bits &
-                                                            int('11000000', 2)) >> 6 >= 1 else None
+                                                            int('11000000', 2)) >> 6 == 2 else None
 
             # execute the instruction
             if bits & int('00100000', 2):
-                # this part doesn't work yet, I was working ahead anyways.
                 self.alu(self.IR, temp_a, temp_b)
                 self.PC += 3 if temp_b is not None else 2
-            elif self.cpuOps[self.IR] == 'HLT':
-                running = False
-                break
-            elif self.cpuOps[self.IR] == 'LDI':
-                self.registers[temp_a] = temp_b
-                self.PC += 3
-            elif self.cpuOps[self.IR] == 'PRN':
-                print(self.registers[temp_a])
-                self.PC += 2
+            else:
+                try:
+                    oper = self.cpuOps[self.IR]
+                    oper(temp_a, temp_b)
+                except:
+                    raise Exception('Unsupported CPU operation')
 
     def ram_read(self, address):
         return self.memory[address]
