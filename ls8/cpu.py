@@ -32,17 +32,18 @@ class CPU:
         else:
             program = [
                 # From print8.ls8
-                0b10000010,  # LDI R0,8
-                0b00000000,
-                0b00001000,
-                0b01000111,  # PRN R0
-                0b00000000,
-                0b00000001,  # HLT
+                '10000010',  # LDI R0,8
+                '00000000',
+                '00001000',
+                '01000111',  # PRN R0
+                '00000000',
+                '00000001',  # HLT
             ]
 
         for instruction in program:
             self.memory[address] = instruction
             address += 1
+        self.program_end = address
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -99,25 +100,83 @@ class CPU:
             self.running = False
 
         def PUSH(temp_a, temp_b):
-            self.registers[self.SP] -= 1
-            self.ram_write(self.registers[self.SP], self.registers[temp_a])
-            self.PC += 2
+            if self.registers[self.SP] > self.program_end:
+                self.registers[self.SP] -= 1
+                self.ram_write(self.registers[self.SP], self.registers[temp_a])
+                self.PC += 2
+            else:
+                raise Exception('Stack is Full')
 
         def POP(temp_a, temp_b):
             if self.registers[self.SP] < 0xf4:
-                self.registers[tem_a] = self.ram_read(self.registers[7])
+                self.registers[temp_a] = self.ram_read(self.registers[7])
                 self.registers[self.SP] += 1
                 self.PC += 2
+            else:
+                raise Exception("Stack is Empty")
+
+        # the functions for jumping around
+        def JMP(temp_a, temp_b):
+            self.PC = self.registers[temp_a]
+            '''00000LGE'''
+
+        def JEQ(temp_a, temp_b):
+            if self.flags & int('00000001', 2):
+                self.PC = self.registers[temp_a]
+            else:
+                self.PC += 2
+
+        def JGE(temp_a, temp_b):
+            if self.flags & int('00000011', 2):
+                self.PC = self.registers[temp_a]
+            else:
+                self.PC += 2
+
+        def JGT(temp_a, temp_b):
+            if self.flags & int('00000010', 2):
+                self.PC = self.registers[temp_a]
+            else:
+                self.PC += 2
+
+        def JLE(temp_a, temp_b):
+            if self.flags & int('00000101', 2):
+                self.PC = self.registers[temp_a]
+            else:
+                self.PC += 2
+
+        def JLT(temp_a, temp_b):
+            if self.flags & int('00000100', 2):
+                self.PC = self.registers[temp_a]
+            else:
+                self.PC += 2
+
+        def JNE(temp_a, temp_b):
+            if self.flags & int('00000001', 2):
+                self.PC += 2
+            else:
+                self.PC = self.registers[temp_a]
 
         self.cpuOps = {1: HLT,
                        7: PRN,
                        2: LDI,
                        5: PUSH,
-                       6: POP}
-
+                       6: POP,
+                       }
+        self.jOps = {4: JMP,
+                     5: JEQ,
+                     10: JGE,
+                     7: JGT,
+                     9: JLE,
+                     8: JLT,
+                     6: JNE}
         """Run the CPU."""
         self.running = True
         while self.running:
+            print(self.memory)
+            print(self.PC)
+            print(self.registers[self.SP])
+            print(self.program_end)
+            print('------------------------')
             # get the data out of the instruction
             bits = int(self.ram_read(self.PC), 2)
             self.IR = bits & int('00001111', 2)
@@ -132,10 +191,11 @@ class CPU:
                 self.PC += 3 if temp_b is not None else 2
             else:
                 try:
-                    oper = self.cpuOps[self.IR]
+                    oper = self.cpuOps[self.IR] if not bits & int(
+                        '00010000', 2) else self.jOps[self.IR]
                     oper(temp_a, temp_b)
-                except:
-                    raise Exception('Unsupported CPU operation')
+                except KeyError as x:
+                    raise Exception(f'Unsupported CPU operation {x}')
 
     def ram_read(self, address):
         return self.memory[address]
