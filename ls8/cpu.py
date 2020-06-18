@@ -58,8 +58,23 @@ class CPU:
             # its possible to come back and only use the add and subtract functions
             # for mult and div but again, MVP for now
             self.registers[reg_a] *= self.registers[reg_b]
+
+            '''00000LGE'''
+        def CMP(reg_a, reg_b):
+            self.flags = 0
+            a = self.registers[reg_a]
+            b = self.registers[reg_b]
+            if a > b:
+                self.flags = 0b00000010
+            if a < b:
+                self.flags = 0b00000100
+            if a == b:
+                self.flags = 0b00000001
+
         self.aluOps = {0: ADD,
-                       2: MULT}
+                       2: MULT,
+                       1: SUB,
+                       7: CMP}
         try:
             oper = self.aluOps[op]
             oper(reg_a, reg_b)
@@ -118,37 +133,27 @@ class CPU:
         # the functions for jumping around
         def JMP(temp_a, temp_b):
             self.PC = self.registers[temp_a]
-            '''00000LGE'''
+
+        def JCMP(temp_a, cmp):
+            if self.flags & int(cmp, 2):
+                JMP(temp_a, None)
+            else:
+                self.PC += 2
 
         def JEQ(temp_a, temp_b):
-            if self.flags & int('00000001', 2):
-                self.PC = self.registers[temp_a]
-            else:
-                self.PC += 2
+            JCMP(temp_a, '00000001')
 
         def JGE(temp_a, temp_b):
-            if self.flags & int('00000011', 2):
-                self.PC = self.registers[temp_a]
-            else:
-                self.PC += 2
+            JCMP(temp_a, '00000011')
 
         def JGT(temp_a, temp_b):
-            if self.flags & int('00000010', 2):
-                self.PC = self.registers[temp_a]
-            else:
-                self.PC += 2
+            JCMP(temp_a, '00000010')
 
         def JLE(temp_a, temp_b):
-            if self.flags & int('00000101', 2):
-                self.PC = self.registers[temp_a]
-            else:
-                self.PC += 2
+            JCMP(temp_a, '00000101')
 
         def JLT(temp_a, temp_b):
-            if self.flags & int('00000100', 2):
-                self.PC = self.registers[temp_a]
-            else:
-                self.PC += 2
+            JCMP(temp_a, '00000100')
 
         def JNE(temp_a, temp_b):
             if self.flags & int('00000001', 2):
@@ -172,11 +177,11 @@ class CPU:
         """Run the CPU."""
         self.running = True
         while self.running:
-            print(self.memory)
-            print(self.PC)
-            print(self.registers[self.SP])
-            print(self.program_end)
-            print('------------------------')
+            # print(self.memory)
+            # print(self.PC)
+            # print(self.registers[self.SP])
+            # print(self.program_end)
+            # print('------------------------')
             # get the data out of the instruction
             bits = int(self.ram_read(self.PC), 2)
             self.IR = bits & int('00001111', 2)
