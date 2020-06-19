@@ -12,6 +12,7 @@ class CPU:
         self.registers = [0] * 8
         self.SP = 7
         self.registers[self.SP] = 0xf4  # initialize the SP
+        self.alu_reg = 6  # the ALU needs a register to do bitwise math, I'm assigning 6
         self.PC = 0
         self.IR = 0
         self.MAR = 0
@@ -49,7 +50,17 @@ class CPU:
         """ALU operations."""
         def ADD(reg_a, reg_b):
             # its possible to come back and do these bitwise, but for now MVP
-            self.registers[reg_a] += self.registers[reg_b]
+            # self.registers[reg_a] += self.registers[reg_b]
+            '''and now for bitwise. I'm going to use AND and OR and XOR like
+            as if all of these functions would actually be self referencial and
+            not just masks for python syntax'''
+            while self.registers[reg_b]:
+                self.registers[self.alu_reg] = self.registers[reg_a]
+                AND(self.alu_reg, reg_b)
+                XOR(reg_a, reg_b)
+                self.registers[reg_b] = self.registers[self.alu_reg]
+                self.registers[self.alu_reg] = 1
+                SHL(reg_b, self.alu_reg)
 
         def SUB(reg_a, reg_b):
             self.registers[reg_a] -= self.registers[reg_b]
@@ -57,9 +68,13 @@ class CPU:
         def MULT(reg_a, reg_b):
             # its possible to come back and only use the add and subtract functions
             # for mult and div but again, MVP for now
-            self.registers[reg_a] *= self.registers[reg_b]
+            print(self.registers[reg_a] * self.registers[reg_b])
+            self.registers[self.alu_reg] = self.registers[reg_a]
+            while self.registers[reg_b]:
+                ADD(reg_a, self.alu_reg)
+                DEC(reg_b)
+                print(self.registers[reg_b])
 
-            '''00000LGE'''
         def CMP(reg_a, reg_b):
             self.flags = 0
             a = self.registers[reg_a]
@@ -71,15 +86,67 @@ class CPU:
             if a == b:
                 self.flags = 0b00000001
 
+        def INC(reg_a, reg_b=None):
+            self.registers[reg_a] += 1
+
+        def DEC(reg_a, reg_b=None):
+            self.registers[reg_a] -= 1
+
+        def AND(reg_a, reg_b):
+            self.registers[reg_a] = self.registers[reg_a] & self.registers[reg_b]
+
+        def DIV(reg_a, reg_b):
+            '''this currently does floor division and returns an integer.'''
+            if self.registers[reg_b] == 0:
+                raise Exception('Cannot Divide by 0')
+            else:
+                print(self.registers[reg_a] // self.registers[reg_b])
+                CMP(reg_a, reg_b)
+                self.registers[self.alu_reg] = 0
+                while self.flags == 2:
+                    SUB(reg_a, reg_b)
+                    INC(self.alu_reg)
+                    CMP(reg_a, reg_b)
+                self.registers[reg_a] = self.registers[self.alu_reg]
+
+        def MOD(reg_a, reg_b):
+            if self.registers[reg_b] == 0:
+                raise Exception('Cannot Divide by 0')
+            else:
+                print(self.registers[reg_a] % self.registers[reg_b])
+                CMP(reg_a, reg_b)
+                self.registers[self.alu_reg] = 0
+                while self.flags == 2:
+                    SUB(reg_a, reg_b)
+                    INC(self.alu_reg)
+                    CMP(reg_a, reg_b)
+
+        def XOR(reg_a, reg_b):
+            self.registers[reg_a] = self.registers[reg_a] ^ self.registers[reg_b]
+
+        def SHL(reg_a, reg_b):
+            self.registers[reg_a] = self.registers[reg_a] << self.registers[reg_b]
+
+        def SHR(reg_a, reg_b):
+            self.registers[reg_a] = self.registers[reg_a] >> self.registers[reg_b]
+
         self.aluOps = {0: ADD,
                        2: MULT,
                        1: SUB,
-                       7: CMP}
+                       7: CMP,
+                       5: INC,
+                       6: DEC,
+                       8: AND,
+                       3: DIV,
+                       12: SHL,
+                       13: SHR,
+                       11: XOR,
+                       4: MOD}
         try:
             oper = self.aluOps[op]
             oper(reg_a, reg_b)
-        except:
-            raise Exception("Unsupported ALU operation")
+        except KeyError as x:
+            raise Exception(f"Unsupported ALU operation {x}")
 
     def trace(self):
         """
@@ -111,6 +178,10 @@ class CPU:
             print(self.registers[register])
             self.PC += 2
 
+        def PRA(temp_a, temp_b):
+            print(chr(int(self.registers[temp_a], 2)), end='')
+            self.PC += 2
+
         def HLT(temp_a, temp_b):
             self.running = False
 
@@ -124,11 +195,15 @@ class CPU:
 
         def POP(temp_a, temp_b):
             if self.registers[self.SP] < 0xf4:
-                self.registers[temp_a] = self.ram_read(self.registers[7])
+                self.registers[temp_a] = self.ram_read(self.registers[self.SP])
                 self.registers[self.SP] += 1
                 self.PC += 2
             else:
                 raise Exception("Stack is Empty")
+
+        def LD(temp_a, temp_b):
+            self.registers[temp_a] = self.ram_read(self.registers[temp_b])
+            self.PC += 3
 
         # the functions for jumping around
         def JMP(temp_a, temp_b):
@@ -161,19 +236,34 @@ class CPU:
             else:
                 self.PC = self.registers[temp_a]
 
+        def CALL(temp_a, temp_b):
+            # Temp_a will be a register number which holds the address of the subroutine
+            # CALL and PUSH are super similar and should use a helper
+            ret_addr = self.PC + 2
+            self.registers[self.SP] -= 1
+            self.ram_write(self.registers[self.SP], ret_addr)
+            JMP(temp_a, None)
+
+        def RET(temp_a, temp_b):
+            self.PC = self.ram_read(self.registers[self.SP])
+            self.registers[self.SP] += 1
+
         self.cpuOps = {1: HLT,
                        7: PRN,
                        2: LDI,
                        5: PUSH,
                        6: POP,
-                       }
+                       8: PRA,
+                       3: LD}
         self.jOps = {4: JMP,
                      5: JEQ,
                      10: JGE,
                      7: JGT,
                      9: JLE,
                      8: JLT,
-                     6: JNE}
+                     6: JNE,
+                     0: CALL,
+                     1: RET}
         """Run the CPU."""
         self.running = True
         while self.running:
