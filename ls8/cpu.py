@@ -69,11 +69,14 @@ class CPU:
             # its possible to come back and only use the add and subtract functions
             # for mult and div but again, MVP for now
             print(self.registers[reg_a] * self.registers[reg_b])
-            self.registers[self.alu_reg] = self.registers[reg_a]
-            while self.registers[reg_b]:
-                ADD(reg_a, self.alu_reg)
-                DEC(reg_b)
-                print(self.registers[reg_b])
+            self.registers[self.alu_reg] = 0
+            while self.registers[reg_b] > 0:
+                if b & 1:  # need to find a way to get 1 into a register
+                    # you can't add while using the ALU_reg
+                    ADD(self.registers[alu_reg], self.registers[reg_a])
+                SHL(reg_a, 1)  # need that one again
+                SHR(reg_b, 1)  # and again with that one
+            self.registers[reg_a] = self.regisers[reg_b]
 
         def CMP(reg_a, reg_b):
             self.flags = 0
